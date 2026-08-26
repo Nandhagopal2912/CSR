@@ -58,6 +58,13 @@ public abstract class Ticket {
         return ticketId;
     }
 
+    public void setTicketId(String ticketId) {
+        if (ticketId == null || ticketId.isBlank()) {
+            throw new IllegalArgumentException("ticketId must not be blank");
+        }
+        this.ticketId = ticketId;
+    }
+
     public SupportRequest getSupportRequest() {
         return supportRequest;
     }

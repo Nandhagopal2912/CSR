@@ -10,6 +10,9 @@ import com.supportrouter.model.SupportRequest;
 import com.supportrouter.observer.AuditObserver;
 import com.supportrouter.observer.DashboardObserver;
 import com.supportrouter.observer.NotificationObserver;
+import com.supportrouter.observer.PersistenceObserver;
+import com.supportrouter.repository.InMemoryTicketRepository;
+import com.supportrouter.repository.TicketRepository;
 import com.supportrouter.strategy.ClassificationStrategy;
 import com.supportrouter.strategy.KeywordClassificationStrategy;
 import com.supportrouter.strategy.PriorityStrategy;
@@ -19,17 +22,27 @@ public class SupportRouter {
     private final SupportHandler handlerChain;
     private final ClassificationStrategy classificationStrategy;
     private final PriorityStrategy priorityStrategy;
+    private final TicketRepository ticketRepository;
 
     public SupportRouter() {
-        this(new KeywordClassificationStrategy(), new RuleBasedPriorityStrategy());
+        this(new KeywordClassificationStrategy(), new RuleBasedPriorityStrategy(), new InMemoryTicketRepository());
     }
 
     public SupportRouter(ClassificationStrategy classificationStrategy, PriorityStrategy priorityStrategy) {
+        this(classificationStrategy, priorityStrategy, new InMemoryTicketRepository());
+    }
+
+    public SupportRouter(ClassificationStrategy classificationStrategy, PriorityStrategy priorityStrategy,
+            TicketRepository ticketRepository) {
         if (classificationStrategy == null || priorityStrategy == null) {
             throw new IllegalArgumentException("classification and priority strategies are required");
         }
+        if (ticketRepository == null) {
+            throw new IllegalArgumentException("ticketRepository is required");
+        }
         this.classificationStrategy = classificationStrategy;
         this.priorityStrategy = priorityStrategy;
+        this.ticketRepository = ticketRepository;
 
         SupportHandler billing = new BillingHandler();
         SupportHandler technical = new TechnicalHandler();
@@ -69,6 +82,8 @@ public class SupportRouter {
         ticket.addObserver(new AuditObserver());
         ticket.addObserver(new NotificationObserver());
         ticket.addObserver(new DashboardObserver());
+        ticket.addObserver(new PersistenceObserver(ticketRepository));
+        ticketRepository.create(ticket);
 
         return ticket;
     }
