@@ -23,6 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SupportRouterTest {
     private final Customer customer = new Customer("C-1", "Ada", "ada@example.com");
@@ -71,6 +72,17 @@ class SupportRouterTest {
                         new SupportRequest("R-2", customer, "payment failed")));
         assertEquals(Priority.CRITICAL, new RuleBasedPriorityStrategy().determinePriority(
                 new SupportRequest("R-3", customer, "security outage")));
+    }
+
+    @Test
+    void createsSupportRequestFromClientDetails() {
+        SupportRequest request = Main.createSupportRequest("C-123", "Ada", "ada@example.com", "Unable to login");
+
+        assertEquals("C-123", request.getCustomer().getCustomerId());
+        assertEquals("Ada", request.getCustomer().getName());
+        assertEquals("ada@example.com", request.getCustomer().getEmail());
+        assertEquals("Unable to login", request.getMessage());
+        assertTrue(request.getRequestId().startsWith("R-"));
     }
 
     private SupportRequest request(String message) {

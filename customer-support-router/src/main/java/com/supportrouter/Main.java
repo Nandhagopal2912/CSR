@@ -2,6 +2,7 @@ package com.supportrouter;
 
 import io.github.cdimascio.dotenv.Dotenv;
 
+import java.util.Scanner;
 import java.util.UUID;
 
 import com.supportrouter.model.Customer;
@@ -19,12 +20,6 @@ public class Main {
                 .ignoreIfMissing()
                 .load();
 
-        Customer customer = new Customer("C-1", "Ada Lovelace", "ada@example.com");
-        SupportRequest request = new SupportRequest(
-                "R-" + UUID.randomUUID(),
-                customer,
-                "I am having trouble logging into my account. Please assist.,account locked");
-
         TicketRepository repository = new MySqlTicketRepository(
                 getConfiguration(dotenv, "DB_URL", "jdbc:mysql://localhost:3306/customer_support"),
                 requireConfiguration(dotenv, "DB_USER"),
@@ -34,11 +29,62 @@ public class Main {
                 new RuleBasedPriorityStrategy(),
                 repository);
 
-        Ticket ticket = router.route(request);
-        ticket.assign();
-        ticket.start();
-        ticket.resolve();
-        ticket.close();
+        try (Scanner scanner = new Scanner(System.in)) {
+            runInteractiveConsole(scanner, router);
+        }
+    }
+
+    static void runInteractiveConsole(Scanner scanner, SupportRouter router) {
+        System.out.println("=== Customer Support Router ===");
+        System.out.println("1. Create a ticket");
+        System.out.println("2. Exit");
+
+        while (true) {
+            System.out.print("Choose an option: ");
+            String choice = scanner.nextLine().trim();
+
+            if ("2".equals(choice) || "exit".equalsIgnoreCase(choice) || "q".equalsIgnoreCase(choice)) {
+                System.out.println("Bye!");
+                return;
+            }
+
+            if (!"1".equals(choice) && !"create".equalsIgnoreCase(choice)) {
+                System.out.println("Please enter 1 to create a ticket or 2 to exit.");
+                continue;
+            }
+
+            System.out.print("Customer ID (optional): ");
+            String customerId = scanner.nextLine().trim();
+            System.out.print("Customer name: ");
+            String name = scanner.nextLine().trim();
+            System.out.print("Customer email: ");
+            String email = scanner.nextLine().trim();
+            System.out.print("Describe the issue: ");
+            String message = scanner.nextLine().trim();
+
+            if (name.isBlank() || email.isBlank() || message.isBlank()) {
+                System.out.println("Name, email, and issue description are required.");
+                continue;
+            }
+
+            SupportRequest request = createSupportRequest(customerId, name, email, message);
+            Ticket ticket = router.route(request);
+
+            System.out.printf("Ticket created successfully. Ticket ID: %s%n", ticket.getTicketId());
+            System.out.printf("Status: %s%n", ticket.getState().getClass().getSimpleName().replace("State", ""));
+            System.out.println("Would you like to create another ticket? (y/n)");
+            String again = scanner.nextLine().trim();
+            if (!"y".equalsIgnoreCase(again) && !"yes".equalsIgnoreCase(again)) {
+                return;
+            }
+        }
+    }
+
+    static SupportRequest createSupportRequest(String customerId, String name, String email, String message) {
+        String normalizedCustomerId = customerId == null || customerId.isBlank() ? "C-" + UUID.randomUUID()
+                : customerId;
+        Customer customer = new Customer(normalizedCustomerId, name, email);
+        return new SupportRequest("R-" + UUID.randomUUID(), customer, message);
     }
 
     private static String requireConfiguration(Dotenv dotenv, String name) {

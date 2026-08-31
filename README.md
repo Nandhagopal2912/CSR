@@ -6,7 +6,10 @@ A Java 17 demonstration project for routing customer support requests to special
 - **Strategy:** classifies requests and determines ticket priority.
 - **State:** controls the ticket lifecycle from open to closed.
 - **Observer:** publishes audit, notification, and dashboard updates when a ticket changes state.
+ 
+ It Uses an interactive terminal prompts to create ticket.
 
+ 
 ## Dependencies and Requirements
 
 - Java Development Kit (JDK) 17 or later
