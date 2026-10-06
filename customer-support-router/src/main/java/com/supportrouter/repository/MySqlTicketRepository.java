@@ -178,7 +178,7 @@ public class MySqlTicketRepository implements TicketRepository {
     }
 
     private static IllegalStateException databaseFailure(String operation, SQLException exception) {
-        return new IllegalStateException("Unable to " + operation, exception);
+        return new IllegalStateException("Unable to " + operation + ": " + exception.getMessage(), exception);
     }
 
     private static String requireText(String value, String fieldName) {
