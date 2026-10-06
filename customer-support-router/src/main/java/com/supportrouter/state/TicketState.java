@@ -1,13 +1,24 @@
 package com.supportrouter.state;
 
-import com.supportrouter.model.Ticket;
-
 public interface TicketState {
-    public void assign(Ticket ticket);
+    TicketState assign();
 
-    public void start(Ticket ticket);
+    TicketState start();
 
-    void resolve(Ticket ticket);
+    TicketState resolve();
 
-    public void close(Ticket ticket);
+    TicketState close();
+
+    String getName();
+
+    static TicketState fromName(String name) {
+        return switch (name) {
+            case "OPEN" -> new OpenState();
+            case "ASSIGNED" -> new AssignedState();
+            case "INPROGRESS" -> new InProgressState();
+            case "RESOLVED" -> new ResolvedState();
+            case "CLOSED" -> new ClosedState();
+            default -> throw new IllegalArgumentException("Unknown ticket status: " + name);
+        };
+    }
 }

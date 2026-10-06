@@ -3,6 +3,7 @@ package com.supportrouter.repository;
 import java.util.List;
 import java.util.Optional;
 
+import com.supportrouter.model.StatusChange;
 import com.supportrouter.model.Ticket;
 
 public interface TicketRepository {
@@ -15,4 +16,8 @@ public interface TicketRepository {
     boolean update(Ticket ticket);
 
     boolean deleteById(String ticketId);
+
+    void recordStatusChange(Ticket ticket, String oldStatus, String newStatus);
+
+    List<StatusChange> findStatusHistory(String ticketId);
 }

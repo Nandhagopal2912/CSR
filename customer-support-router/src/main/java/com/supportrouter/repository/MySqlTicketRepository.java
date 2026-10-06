@@ -13,13 +13,10 @@ import com.supportrouter.factory.TicketFactory;
 import com.supportrouter.model.Category;
 import com.supportrouter.model.Customer;
 import com.supportrouter.model.Priority;
+import com.supportrouter.model.StatusChange;
 import com.supportrouter.model.SupportRequest;
 import com.supportrouter.model.Ticket;
-import com.supportrouter.state.AssignedState;
-import com.supportrouter.state.ClosedState;
-import com.supportrouter.state.InProgressState;
-import com.supportrouter.state.OpenState;
-import com.supportrouter.state.ResolvedState;
+import com.supportrouter.state.TicketState;
 
 public class MySqlTicketRepository implements TicketRepository {
     private static final String COLUMNS = "ticket_id, request_id, customer_id, customer_name, customer_email, message, "
@@ -109,6 +106,7 @@ public class MySqlTicketRepository implements TicketRepository {
         }
     }
 
+    @Override
     public void recordStatusChange(Ticket ticket, String oldStatus, String newStatus) {
         String sql = "INSERT INTO ticket_status_history (ticket_id, old_status, new_status) VALUES (?, ?, ?)";
         try (Connection connection = connect(); PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -118,6 +116,26 @@ public class MySqlTicketRepository implements TicketRepository {
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw databaseFailure("record status change", exception);
+        }
+    }
+
+    @Override
+    public List<StatusChange> findStatusHistory(String ticketId) {
+        String sql = "SELECT old_status, new_status, changed_at FROM ticket_status_history "
+                + "WHERE ticket_id = ? ORDER BY changed_at, id";
+        List<StatusChange> changes = new ArrayList<>();
+        try (Connection connection = connect(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, ticketId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    changes.add(new StatusChange(resultSet.getString("old_status"),
+                            resultSet.getString("new_status"),
+                            resultSet.getTimestamp("changed_at").toLocalDateTime()));
+                }
+            }
+            return changes;
+        } catch (SQLException exception) {
+            throw databaseFailure("find status history", exception);
         }
     }
 
@@ -145,7 +163,7 @@ public class MySqlTicketRepository implements TicketRepository {
         statement.setString(offset + 4, request.getCategory().name());
         statement.setString(offset + 5, request.getPriority().name());
         statement.setString(offset + 6, ticket.getAssignedTeam());
-        statement.setString(offset + 7, statusName(ticket));
+        statement.setString(offset + 7, ticket.getStatusName());
     }
 
     private static Ticket mapTicket(ResultSet resultSet) throws SQLException {
@@ -154,25 +172,9 @@ public class MySqlTicketRepository implements TicketRepository {
         SupportRequest request = new SupportRequest(resultSet.getString("request_id"), customer,
                 resultSet.getString("message"), Category.valueOf(resultSet.getString("category")),
                 Priority.valueOf(resultSet.getString("priority")));
-        Ticket ticket = TicketFactory.createTicket(request);
+        Ticket ticket = TicketFactory.createTicket(request, TicketState.fromName(resultSet.getString("status")));
         ticket.setTicketId(resultSet.getString("ticket_id"));
-        ticket.setState(stateFor(resultSet.getString("status")));
         return ticket;
-    }
-
-    private static String statusName(Ticket ticket) {
-        return ticket.getState().getClass().getSimpleName().replace("State", "").toUpperCase();
-    }
-
-    private static com.supportrouter.state.TicketState stateFor(String status) {
-        return switch (status) {
-            case "OPEN" -> new OpenState();
-            case "ASSIGNED" -> new AssignedState();
-            case "INPROGRESS" -> new InProgressState();
-            case "RESOLVED" -> new ResolvedState();
-            case "CLOSED" -> new ClosedState();
-            default -> throw new IllegalArgumentException("Unknown ticket status: " + status);
-        };
     }
 
     private static IllegalStateException databaseFailure(String operation, SQLException exception) {

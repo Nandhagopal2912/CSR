@@ -1,25 +1,28 @@
 package com.supportrouter.state;
-import com.supportrouter.model.Ticket;
 
 public class ClosedState implements TicketState {
     @Override
-    public void assign(Ticket ticket) {
-        System.out.println("Cannot assign a closed ticket.");
+    public TicketState assign() {
+        throw new IllegalStateException("Cannot assign a closed ticket.");
     }
 
     @Override
-    public void start(Ticket ticket) {
-        System.out.println("Cannot start a closed ticket.");
+    public TicketState start() {
+        throw new IllegalStateException("Cannot start a closed ticket.");
     }
 
     @Override
-    public void resolve(Ticket ticket) {
-        System.out.println("Cannot resolve a closed ticket.");
+    public TicketState resolve() {
+        throw new IllegalStateException("Cannot resolve a closed ticket.");
     }
 
     @Override
-    public void close(Ticket ticket) {
-        System.out.println("Ticket is already closed.");
+    public TicketState close() {
+        throw new IllegalStateException("Ticket is already closed.");
     }
 
+    @Override
+    public String getName() {
+        return "CLOSED";
+    }
 }

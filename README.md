@@ -76,7 +76,21 @@ mvn compile exec:java
 ```
 
 The database generates a unique numeric ticket ID for each new ticket. The
-application prints the routed ticket summary and each lifecycle transition.
+interactive menu offers:
+
+```text
+=== Customer Support Router ===
+1. Create ticket
+2. List tickets
+3. View ticket (details + status history)
+4. Update ticket status
+5. Exit
+```
+
+Updating a ticket's status (assign, start, resolve, close) runs the State
+pattern transition and triggers the Audit, Notification, Dashboard, and
+Persistence observers. Invalid transitions, such as closing an open ticket,
+are rejected with an error message.
 
 ## MySQL Persistence
 
@@ -109,7 +123,7 @@ Run the JUnit test suite with Maven:
 mvn test
 ```
 
-The tests cover category routing, ticket lifecycle rules, observer notifications, request classification, and critical-priority handling.
+The tests cover category routing, the full ticket lifecycle, every invalid state transition, observer notifications, status history, request classification, critical-priority handling, and a scripted run of the interactive menu.
 
 ## Project Structure
 
@@ -134,7 +148,10 @@ Tickets follow this lifecycle:
 Open -> Assigned -> In Progress -> Resolved -> Closed
 ```
 
-Closing a ticket before it is resolved is rejected by the state machine.
+Each state returns the next state for a valid action and throws
+`IllegalStateException` for an invalid one, so a ticket can only move along
+this path. `Ticket` is the only class that changes its own state, and every
+change is recorded in `ticket_status_history`.
 
 ## Useful Commands
 

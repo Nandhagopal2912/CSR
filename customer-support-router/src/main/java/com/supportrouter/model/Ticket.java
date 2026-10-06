@@ -9,42 +9,47 @@ import com.supportrouter.state.TicketState;
 
 public abstract class Ticket {
     private String ticketId;
-    private SupportRequest supportRequest;
-    private Priority priority;
-    private String assignedTeam;
+    private final SupportRequest supportRequest;
+    private final Priority priority;
+    private final String assignedTeam;
     private TicketState status;
+    private final List<TicketObserver> observers = new ArrayList<>();
 
-    public Ticket(SupportRequest request) {
+    protected Ticket(SupportRequest request) {
+        this(request, new OpenState());
+    }
+
+    protected Ticket(SupportRequest request, TicketState initialState) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
+        }
+        if (initialState == null) {
+            throw new IllegalArgumentException("initialState must not be null");
         }
         this.ticketId = request.getRequestId();
         this.supportRequest = request;
         this.priority = request.getPriority();
         this.assignedTeam = request.getAssignedTeam();
-        this.status = new OpenState();
+        this.status = initialState;
     }
 
     public void assign() {
-        status.assign(this);
+        transitionTo(status.assign());
     }
 
     public void start() {
-        status.start(this);
+        transitionTo(status.start());
     }
 
     public void resolve() {
-        status.resolve(this);
+        transitionTo(status.resolve());
     }
 
     public void close() {
-        status.close(this);
+        transitionTo(status.close());
     }
 
-    public void setState(TicketState newState) {
-        if (newState == null) {
-            throw new IllegalArgumentException("newState must not be null");
-        }
+    private void transitionTo(TicketState newState) {
         TicketState oldState = this.status;
         this.status = newState;
         notifyObservers(oldState, newState);
@@ -52,6 +57,10 @@ public abstract class Ticket {
 
     public TicketState getState() {
         return status;
+    }
+
+    public String getStatusName() {
+        return status.getName();
     }
 
     public String getTicketId() {
@@ -76,8 +85,6 @@ public abstract class Ticket {
     public String getAssignedTeam() {
         return assignedTeam;
     }
-
-    private final List<TicketObserver> observers = new ArrayList<>();
 
     public void addObserver(TicketObserver observer) {
         if (observer == null) {

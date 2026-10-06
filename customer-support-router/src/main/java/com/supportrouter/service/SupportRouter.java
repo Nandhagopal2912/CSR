@@ -1,16 +1,21 @@
 package com.supportrouter.service;
 
+import java.util.List;
+import java.util.Optional;
+
 import com.supportrouter.handler.AccountHandler;
 import com.supportrouter.handler.BillingHandler;
 import com.supportrouter.handler.GeneralHandler;
 import com.supportrouter.handler.SupportHandler;
 import com.supportrouter.handler.TechnicalHandler;
+import com.supportrouter.model.StatusChange;
 import com.supportrouter.model.Ticket;
 import com.supportrouter.model.SupportRequest;
 import com.supportrouter.observer.AuditObserver;
 import com.supportrouter.observer.DashboardObserver;
 import com.supportrouter.observer.NotificationObserver;
 import com.supportrouter.observer.PersistenceObserver;
+import com.supportrouter.observer.TicketObserver;
 import com.supportrouter.repository.InMemoryTicketRepository;
 import com.supportrouter.repository.TicketRepository;
 import com.supportrouter.strategy.ClassificationStrategy;
@@ -23,6 +28,7 @@ public class SupportRouter {
     private final ClassificationStrategy classificationStrategy;
     private final PriorityStrategy priorityStrategy;
     private final TicketRepository ticketRepository;
+    private final List<TicketObserver> observers;
 
     public SupportRouter() {
         this(new KeywordClassificationStrategy(), new RuleBasedPriorityStrategy(), new InMemoryTicketRepository());
@@ -43,6 +49,8 @@ public class SupportRouter {
         this.classificationStrategy = classificationStrategy;
         this.priorityStrategy = priorityStrategy;
         this.ticketRepository = ticketRepository;
+        this.observers = List.of(new AuditObserver(), new NotificationObserver(), new DashboardObserver(),
+                new PersistenceObserver(ticketRepository));
 
         SupportHandler billing = new BillingHandler();
         SupportHandler technical = new TechnicalHandler();
@@ -79,13 +87,28 @@ public class SupportRouter {
             throw new IllegalStateException("No handler could process category " + classifiedRequest.getCategory());
         }
 
-        ticket.addObserver(new AuditObserver());
-        ticket.addObserver(new NotificationObserver());
-        ticket.addObserver(new DashboardObserver());
-        ticket.addObserver(new PersistenceObserver(ticketRepository));
         ticketRepository.create(ticket);
-
+        attachObservers(ticket);
         return ticket;
     }
 
+    public Optional<Ticket> findTicket(String ticketId) {
+        Optional<Ticket> ticket = ticketRepository.findById(ticketId);
+        ticket.ifPresent(this::attachObservers);
+        return ticket;
+    }
+
+    public List<Ticket> listTickets() {
+        List<Ticket> tickets = ticketRepository.findAll();
+        tickets.forEach(this::attachObservers);
+        return tickets;
+    }
+
+    public List<StatusChange> getStatusHistory(String ticketId) {
+        return ticketRepository.findStatusHistory(ticketId);
+    }
+
+    private void attachObservers(Ticket ticket) {
+        observers.forEach(ticket::addObserver);
+    }
 }

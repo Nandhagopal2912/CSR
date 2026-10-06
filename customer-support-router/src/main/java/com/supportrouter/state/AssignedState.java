@@ -1,26 +1,28 @@
 package com.supportrouter.state;
-import com.supportrouter.model.Ticket;
 
 public class AssignedState implements TicketState {
     @Override
-    public void assign(Ticket ticket) {
-        System.out.println("Ticket is already assigned.");
+    public TicketState assign() {
+        throw new IllegalStateException("Ticket is already assigned.");
     }
 
     @Override
-    public void start(Ticket ticket) {
-        System.out.println("Starting work on the ticket.");
-        ticket.setState(new InProgressState());
+    public TicketState start() {
+        return new InProgressState();
     }
 
     @Override
-    public void resolve(Ticket ticket) {
-        System.out.println("Cannot resolve a ticket that is not in progress.");
+    public TicketState resolve() {
+        throw new IllegalStateException("Cannot resolve a ticket that is not in progress.");
     }
 
     @Override
-    public void close(Ticket ticket) {
-        System.out.println("Cannot close a ticket that is not resolved.");
+    public TicketState close() {
+        throw new IllegalStateException("Cannot close a ticket that is not resolved.");
     }
 
+    @Override
+    public String getName() {
+        return "ASSIGNED";
+    }
 }
