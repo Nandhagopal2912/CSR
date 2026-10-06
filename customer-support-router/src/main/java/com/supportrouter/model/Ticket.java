@@ -13,13 +13,14 @@ public abstract class Ticket {
     private final Priority priority;
     private final String assignedTeam;
     private TicketState status;
+    private String assignedAgent;
     private final List<TicketObserver> observers = new ArrayList<>();
 
     protected Ticket(SupportRequest request) {
-        this(request, new OpenState());
+        this(request, new OpenState(), null);
     }
 
-    protected Ticket(SupportRequest request, TicketState initialState) {
+    protected Ticket(SupportRequest request, TicketState initialState, String assignedAgent) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }
@@ -31,10 +32,16 @@ public abstract class Ticket {
         this.priority = request.getPriority();
         this.assignedTeam = request.getAssignedTeam();
         this.status = initialState;
+        this.assignedAgent = assignedAgent;
     }
 
-    public void assign() {
-        transitionTo(status.assign());
+    public void assign(String agentUsername) {
+        if (agentUsername == null || agentUsername.isBlank()) {
+            throw new IllegalArgumentException("An agent is required to assign a ticket");
+        }
+        TicketState next = status.assign();
+        this.assignedAgent = agentUsername;
+        transitionTo(next);
     }
 
     public void start() {
@@ -84,6 +91,18 @@ public abstract class Ticket {
 
     public String getAssignedTeam() {
         return assignedTeam;
+    }
+
+    public String getAssignedAgent() {
+        return assignedAgent;
+    }
+
+    public boolean isAssignedTo(String username) {
+        return assignedAgent != null && assignedAgent.equals(username);
+    }
+
+    public boolean belongsTo(String customerId) {
+        return supportRequest.getCustomer().getCustomerId().equals(customerId);
     }
 
     public void addObserver(TicketObserver observer) {

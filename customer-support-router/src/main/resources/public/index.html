@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support Router</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="card login-card">
+      <h1>Customer Support Router</h1>
+      <p class="muted">Sign in with your username.</p>
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" required autofocus>
+      <button type="submit" class="primary">Sign in</button>
+      <p id="login-error" class="error" hidden></p>
+      <div class="demo-users">
+        <p class="muted">Demo users</p>
+        <div class="chips">
+          <button type="button" class="chip" data-user="priya">priya <span>customer</span></button>
+          <button type="button" class="chip" data-user="arjun">arjun <span>customer</span></button>
+          <button type="button" class="chip" data-user="ravi">ravi <span>agent</span></button>
+          <button type="button" class="chip" data-user="meena">meena <span>agent</span></button>
+          <button type="button" class="chip" data-user="sanjay">sanjay <span>supervisor</span></button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section id="app-view" hidden>
+    <header class="topbar">
+      <h1>Support Router</h1>
+      <div class="whoami">
+        <span id="user-name"></span>
+        <span id="user-role" class="role"></span>
+        <button id="logout" type="button" class="ghost">Log out</button>
+      </div>
+    </header>
+
+    <div id="flash" class="flash" hidden></div>
+
+    <main class="layout">
+      <section class="card">
+        <div class="card-head">
+          <h2 id="tickets-title">Tickets</h2>
+          <button id="new-ticket" type="button" class="primary" hidden>New ticket</button>
+        </div>
+
+        <form id="create-form" class="create-form" hidden>
+          <div id="customer-fields" class="grid-3" hidden>
+            <div>
+              <label for="customer-name">Customer name</label>
+              <input id="customer-name">
+            </div>
+            <div>
+              <label for="customer-email">Customer email</label>
+              <input id="customer-email" type="email">
+            </div>
+            <div>
+              <label for="customer-id">Customer ID (optional)</label>
+              <input id="customer-id">
+            </div>
+          </div>
+          <label for="message">Describe the issue</label>
+          <textarea id="message" rows="3" required></textarea>
+          <div class="form-actions">
+            <button type="button" id="cancel-create" class="ghost">Cancel</button>
+            <button type="submit" class="primary">Submit ticket</button>
+          </div>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Category</th><th>Priority</th><th>Status</th><th>Agent</th><th>Customer</th>
+              </tr>
+            </thead>
+            <tbody id="ticket-rows"></tbody>
+          </table>
+        </div>
+        <p id="no-tickets" class="muted empty" hidden>No tickets yet.</p>
+      </section>
+
+      <aside id="detail" class="card detail">
+        <p class="muted empty">Select a ticket to see its details.</p>
+      </aside>
+    </main>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

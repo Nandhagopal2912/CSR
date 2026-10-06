@@ -10,8 +10,10 @@ import com.supportrouter.model.StatusChange;
 import com.supportrouter.model.SupportRequest;
 import com.supportrouter.model.TechnicalTicket;
 import com.supportrouter.model.Ticket;
+import com.supportrouter.model.TicketAction;
 import com.supportrouter.observer.TicketObserver;
-import com.supportrouter.repository.InMemoryTicketRepository;
+import com.supportrouter.repository.InMemoryUserRepository;
+import com.supportrouter.service.NotFoundException;
 import com.supportrouter.service.SupportRouter;
 import com.supportrouter.state.AssignedState;
 import com.supportrouter.state.ClosedState;
@@ -23,8 +25,11 @@ import com.supportrouter.strategy.KeywordClassificationStrategy;
 import com.supportrouter.strategy.RuleBasedPriorityStrategy;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,19 +45,20 @@ class SupportRouterTest {
     void routesEveryCategoryToTheCorrectTicketType() {
         SupportRouter router = new SupportRouter();
 
-        assertInstanceOf(BillingTicket.class, router.route(request("payment failed")));
-        assertInstanceOf(TechnicalTicket.class, router.route(request("application bug")));
-        assertInstanceOf(AccountTicket.class, router.route(request("account locked")));
-        assertInstanceOf(GeneralTicket.class, router.route(request("general question")));
+        assertInstanceOf(BillingTicket.class, router.createTicket(request("payment failed")));
+        assertInstanceOf(TechnicalTicket.class, router.createTicket(request("application bug")));
+        assertInstanceOf(AccountTicket.class, router.createTicket(request("account locked")));
+        assertInstanceOf(GeneralTicket.class, router.createTicket(request("general question")));
     }
 
     @Test
     void ticketFollowsFullLifecycle() {
-        Ticket ticket = new SupportRouter().route(request("general request"));
+        Ticket ticket = new SupportRouter().createTicket(request("general request"));
 
         assertEquals("OPEN", ticket.getStatusName());
-        ticket.assign();
+        ticket.assign("ravi");
         assertInstanceOf(AssignedState.class, ticket.getState());
+        assertEquals("ravi", ticket.getAssignedAgent());
         ticket.start();
         assertInstanceOf(InProgressState.class, ticket.getState());
         ticket.resolve();
@@ -73,36 +79,40 @@ class SupportRouterTest {
 
     @Test
     void invalidTransitionLeavesTicketUnchanged() {
-        Ticket ticket = new SupportRouter().route(request("general request"));
-        ticket.assign();
+        Ticket ticket = new SupportRouter().createTicket(request("general request"));
+        ticket.assign("ravi");
 
         assertThrows(IllegalStateException.class, ticket::close);
+        assertThrows(IllegalStateException.class, () -> ticket.assign("meena"));
         assertEquals("ASSIGNED", ticket.getStatusName());
+        assertEquals("ravi", ticket.getAssignedAgent());
     }
 
     @Test
     void stateChangesNotifyObservers() {
-        Ticket ticket = new SupportRouter().route(request("account request"));
+        Ticket ticket = new SupportRouter().createTicket(request("account request"));
         List<String> changes = new ArrayList<>();
         TicketObserver observer = (updatedTicket, oldState, newState) -> changes
                 .add(oldState.getName() + "->" + newState.getName());
         ticket.addObserver(observer);
 
-        ticket.assign();
+        ticket.assign("ravi");
 
         assertEquals(List.of("OPEN->ASSIGNED"), changes);
     }
 
     @Test
-    void statusChangesAreRecordedInHistory() {
-        SupportRouter router = new SupportRouter(new KeywordClassificationStrategy(),
-                new RuleBasedPriorityStrategy(), new InMemoryTicketRepository());
-        Ticket ticket = router.route(request("payment failed"));
+    void routerAssignsAndChangesStatusWithHistory() {
+        SupportRouter router = new SupportRouter();
+        String id = router.createTicket(request("payment failed")).getTicketId();
 
-        ticket.assign();
-        ticket.start();
+        router.assignTicket(id, "ravi");
+        router.changeStatus(id, TicketAction.START);
 
-        List<StatusChange> history = router.getStatusHistory(ticket.getTicketId());
+        Ticket reloaded = router.getTicket(id);
+        assertEquals("INPROGRESS", reloaded.getStatusName());
+        assertEquals("ravi", reloaded.getAssignedAgent());
+        List<StatusChange> history = router.getStatusHistory(id);
         assertEquals(2, history.size());
         assertEquals("OPEN", history.get(0).oldStatus());
         assertEquals("ASSIGNED", history.get(0).newStatus());
@@ -110,15 +120,18 @@ class SupportRouterTest {
     }
 
     @Test
-    void ticketsLoadedThroughRouterStillPersistChanges() {
+    void assigningRequiresARealAgent() {
         SupportRouter router = new SupportRouter();
-        String ticketId = router.route(request("account locked")).getTicketId();
+        String id = router.createTicket(request("payment failed")).getTicketId();
 
-        Ticket loaded = router.findTicket(ticketId).orElseThrow();
-        loaded.assign();
+        assertThrows(IllegalArgumentException.class, () -> router.assignTicket(id, "nobody"));
+        assertThrows(IllegalArgumentException.class, () -> router.assignTicket(id, "sanjay"));
+        assertEquals("OPEN", router.getTicket(id).getStatusName());
+    }
 
-        assertEquals(1, router.getStatusHistory(ticketId).size());
-        assertEquals("ASSIGNED", router.findTicket(ticketId).orElseThrow().getStatusName());
+    @Test
+    void unknownTicketThrowsNotFound() {
+        assertThrows(NotFoundException.class, () -> new SupportRouter().getTicket("missing"));
     }
 
     @Test
@@ -127,6 +140,12 @@ class SupportRouterTest {
             assertEquals(name, TicketState.fromName(name).getName());
         }
         assertThrows(IllegalArgumentException.class, () -> TicketState.fromName("UNKNOWN"));
+    }
+
+    @Test
+    void ticketActionParsesInputCaseInsensitively() {
+        assertEquals(TicketAction.RESOLVE, TicketAction.parse(" resolve "));
+        assertThrows(IllegalArgumentException.class, () -> TicketAction.parse("delete"));
     }
 
     @Test
@@ -150,40 +169,41 @@ class SupportRouterTest {
     }
 
     @Test
-    void consoleCreatesListsUpdatesAndShowsHistory() {
-        String input = String.join("\n",
-                "1", "", "Ada", "ada@example.com", "payment failed",
-                "2",
-                "4", "nope",
-                "4", "R-THIS-WILL-NOT-EXIST", "",
-                "5") + "\n";
+    void consoleEnforcesRolesAcrossLogins() {
         SupportRouter router = new SupportRouter();
-        String output = runConsole(input, router);
+        InMemoryUserRepository users = InMemoryUserRepository.withDemoUsers();
+
+        String output = runConsole(String.join("\n",
+                "nobody",
+                "priya", "1", "payment failed", "4", "6",
+                "sanjay", "2", "0") + "\n", router, users);
+
+        assertTrue(output.contains("Unknown user: nobody"));
+        assertTrue(output.contains("Welcome, Priya Sharma (CUSTOMER)"));
+        assertTrue(output.contains("Ticket created successfully"));
+        assertTrue(output.contains("Error: CUSTOMER 'priya' is not allowed to assign ticket."));
+        assertTrue(output.contains("Welcome, Sanjay Rao (SUPERVISOR)"));
         String ticketId = router.listTickets().get(0).getTicketId();
 
-        assertTrue(output.contains("Ticket created successfully"));
-        assertTrue(output.contains("BILLING"));
-        assertTrue(output.contains("No ticket found with ID nope."));
-
-        String flow = String.join("\n",
-                "4", ticketId, "c",
-                "4", ticketId, "a",
-                "3", ticketId,
-                "5") + "\n";
-        output = runConsole(flow, router);
+        output = runConsole(String.join("\n",
+                "sanjay", "5", ticketId, "close",
+                "4", ticketId, "ravi", "6",
+                "ravi", "5", ticketId, "start",
+                "3", ticketId, "0") + "\n", router, users);
 
         assertTrue(output.contains("Error: Cannot close an open ticket."));
-        assertTrue(output.contains("Audit Log: Ticket " + ticketId + " changed from OPEN to ASSIGNED"));
-        assertTrue(output.contains("Ticket " + ticketId + " is now ASSIGNED."));
+        assertTrue(output.contains("is now ASSIGNED and assigned to ravi"));
+        assertTrue(output.contains("Audit Log: Ticket " + ticketId + " changed from ASSIGNED to INPROGRESS"));
         assertTrue(output.contains("OPEN -> ASSIGNED"));
+        assertTrue(output.contains("ASSIGNED -> INPROGRESS"));
     }
 
-    private static String runConsole(String input, SupportRouter router) {
-        java.io.PrintStream originalOut = System.out;
-        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
-        System.setOut(new java.io.PrintStream(buffer, true));
+    private static String runConsole(String input, SupportRouter router, InMemoryUserRepository users) {
+        PrintStream originalOut = System.out;
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(buffer, true));
         try {
-            Main.runInteractiveConsole(new java.util.Scanner(input), router);
+            Main.runInteractiveConsole(new Scanner(input), router, users);
         } finally {
             System.setOut(originalOut);
         }

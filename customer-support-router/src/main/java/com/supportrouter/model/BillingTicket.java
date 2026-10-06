@@ -7,7 +7,7 @@ public class BillingTicket extends Ticket {
         super(request);
     }
 
-    public BillingTicket(SupportRequest request, TicketState initialState) {
-        super(request, initialState);
+    public BillingTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
+        super(request, initialState, assignedAgent);
     }
 }

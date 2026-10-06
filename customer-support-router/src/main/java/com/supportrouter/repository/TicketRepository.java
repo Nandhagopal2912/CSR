@@ -13,6 +13,10 @@ public interface TicketRepository {
 
     List<Ticket> findAll();
 
+    List<Ticket> findByCustomerId(String customerId);
+
+    List<Ticket> findByAssignedAgent(String agentUsername);
+
     boolean update(Ticket ticket);
 
     boolean deleteById(String ticketId);

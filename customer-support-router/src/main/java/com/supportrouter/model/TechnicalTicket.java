@@ -7,7 +7,7 @@ public class TechnicalTicket extends Ticket {
         super(request);
     }
 
-    public TechnicalTicket(SupportRequest request, TicketState initialState) {
-        super(request, initialState);
+    public TechnicalTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
+        super(request, initialState, assignedAgent);
     }
 }

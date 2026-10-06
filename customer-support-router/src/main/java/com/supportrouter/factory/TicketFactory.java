@@ -11,15 +11,15 @@ import com.supportrouter.state.TicketState;
 
 public class TicketFactory {
     public static Ticket createTicket(SupportRequest request) {
-        return createTicket(request, new OpenState());
+        return createTicket(request, new OpenState(), null);
     }
 
-    public static Ticket createTicket(SupportRequest request, TicketState initialState) {
+    public static Ticket createTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
         return switch (request.getCategory()) {
-            case BILLING -> new BillingTicket(request, initialState);
-            case ACCOUNT -> new AccountTicket(request, initialState);
-            case TECHNICAL -> new TechnicalTicket(request, initialState);
-            case GENERAL -> new GeneralTicket(request, initialState);
+            case BILLING -> new BillingTicket(request, initialState, assignedAgent);
+            case ACCOUNT -> new AccountTicket(request, initialState, assignedAgent);
+            case TECHNICAL -> new TechnicalTicket(request, initialState, assignedAgent);
+            case GENERAL -> new GeneralTicket(request, initialState, assignedAgent);
         };
     }
 }

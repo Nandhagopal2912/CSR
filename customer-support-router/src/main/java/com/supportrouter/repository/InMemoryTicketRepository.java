@@ -13,12 +13,14 @@ import com.supportrouter.model.Ticket;
 public class InMemoryTicketRepository implements TicketRepository {
     private final Map<String, Ticket> tickets = new LinkedHashMap<>();
     private final Map<String, List<StatusChange>> history = new LinkedHashMap<>();
+    private long nextId = 1;
 
     @Override
     public synchronized Ticket create(Ticket ticket) {
         if (ticket == null) {
             throw new IllegalArgumentException("ticket must not be null");
         }
+        ticket.setTicketId(String.valueOf(nextId++));
         tickets.put(ticket.getTicketId(), ticket);
         return ticket;
     }
@@ -31,6 +33,16 @@ public class InMemoryTicketRepository implements TicketRepository {
     @Override
     public synchronized List<Ticket> findAll() {
         return new ArrayList<>(tickets.values());
+    }
+
+    @Override
+    public synchronized List<Ticket> findByCustomerId(String customerId) {
+        return tickets.values().stream().filter(ticket -> ticket.belongsTo(customerId)).toList();
+    }
+
+    @Override
+    public synchronized List<Ticket> findByAssignedAgent(String agentUsername) {
+        return tickets.values().stream().filter(ticket -> ticket.isAssignedTo(agentUsername)).toList();
     }
 
     @Override

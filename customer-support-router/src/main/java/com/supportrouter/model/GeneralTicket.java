@@ -7,7 +7,7 @@ public class GeneralTicket extends Ticket {
         super(request);
     }
 
-    public GeneralTicket(SupportRequest request, TicketState initialState) {
-        super(request, initialState);
+    public GeneralTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
+        super(request, initialState, assignedAgent);
     }
 }
