@@ -61,7 +61,9 @@ class PatternPolishTest {
     @Test
     void llmStrategyParsesModelAnswer() throws IOException {
         AtomicReference<String> requestBody = new AtomicReference<>();
-        HttpServer ollama = fakeOllama(200, "{\"response\":\" Billing.\"}", requestBody);
+        HttpServer ollama = fakeOllama(200,
+                "{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"category\\\": \\\"BILLING\\\"}\"}}",
+                requestBody);
         try {
             LlmClassificationStrategy strategy = new LlmClassificationStrategy(url(ollama), "tiny-model");
 
@@ -70,7 +72,9 @@ class PatternPolishTest {
             JsonNode sent = new ObjectMapper().readTree(requestBody.get());
             assertEquals("tiny-model", sent.get("model").asText());
             assertFalse(sent.get("stream").asBoolean());
-            assertTrue(sent.get("prompt").asText().contains("I was charged twice"));
+            assertEquals("system", sent.get("messages").get(0).get("role").asText());
+            assertEquals("I was charged twice", sent.get("messages").get(1).get("content").asText());
+            assertEquals(4, sent.get("format").get("properties").get("category").get("enum").size());
         } finally {
             ollama.stop(0);
         }
@@ -92,6 +96,13 @@ class PatternPolishTest {
         }
         assertEquals(Category.GENERAL, new LlmClassificationStrategy("http://localhost:" + closedPort, "m")
                 .classify(request("help")));
+    }
+
+    @Test
+    void llmAnswerParsingHandlesJsonAndPlainText() {
+        assertEquals(Category.TECHNICAL, LlmClassificationStrategy.parseCategory("{\"category\":\"TECHNICAL\"}"));
+        assertEquals(Category.ACCOUNT, LlmClassificationStrategy.parseCategory("Account, not billing"));
+        assertEquals(Category.GENERAL, LlmClassificationStrategy.parseCategory("no idea"));
     }
 
     @Test
@@ -130,7 +141,7 @@ class PatternPolishTest {
     private static HttpServer fakeOllama(int status, String responseBody, AtomicReference<String> received)
             throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
-        server.createContext("/api/generate", exchange -> {
+        server.createContext("/api/chat", exchange -> {
             received.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(status, bytes.length);

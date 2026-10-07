@@ -6,11 +6,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.supportrouter.model.Category;
 import com.supportrouter.model.SupportRequest;
@@ -19,16 +22,19 @@ import com.supportrouter.model.SupportRequest;
 public class LlmClassificationStrategy implements ClassificationStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(LlmClassificationStrategy.class);
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final String PROMPT = """
-            You route customer support messages into one category:
-            BILLING - payments, refunds, invoices, charges
-            TECHNICAL - errors, bugs, crashes, something not working
-            ACCOUNT - login, password, profile, access to an account
-            GENERAL - anything else
-            Reply with exactly one word: BILLING, TECHNICAL, ACCOUNT, or GENERAL.
-
-            Message: \"\"\"%s\"\"\"
-            Category:""";
+    private static final String SYSTEM_PROMPT = """
+            You are a support ticket router. Pick the single best category for the user's message.
+            GENERAL: general questions (hours, discounts, feedback, thanks) and anything that fits nothing else
+            TECHNICAL: something is broken - errors, bugs, crashes, website or app not working
+            BILLING: money - payments, charges, refunds, invoices, prices
+            ACCOUNT: signing in, passwords, profile settings, account access""";
+    // Constrains the model's output to one of the categories (Ollama structured outputs).
+    private static final Map<String, Object> ANSWER_SCHEMA = Map.of(
+            "type", "object",
+            "properties", Map.of("category", Map.of(
+                    "type", "string",
+                    "enum", List.of("GENERAL", "TECHNICAL", "BILLING", "ACCOUNT"))),
+            "required", List.of("category"));
 
     private final URI endpoint;
     private final String model;
@@ -38,7 +44,7 @@ public class LlmClassificationStrategy implements ClassificationStrategy {
         if (baseUrl == null || baseUrl.isBlank() || model == null || model.isBlank()) {
             throw new IllegalArgumentException("baseUrl and model are required");
         }
-        this.endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/api/generate");
+        this.endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/api/chat");
         this.model = model;
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     }
@@ -48,9 +54,12 @@ public class LlmClassificationStrategy implements ClassificationStrategy {
         try {
             String body = JSON.writeValueAsString(Map.of(
                     "model", model,
-                    "prompt", PROMPT.formatted(request.getMessage()),
                     "stream", false,
-                    "options", Map.of("temperature", 0)));
+                    "format", ANSWER_SCHEMA,
+                    "options", Map.of("temperature", 0),
+                    "messages", List.of(
+                            Map.of("role", "system", "content", SYSTEM_PROMPT),
+                            Map.of("role", "user", "content", request.getMessage()))));
             HttpRequest httpRequest = HttpRequest.newBuilder(endpoint)
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")
@@ -61,7 +70,7 @@ public class LlmClassificationStrategy implements ClassificationStrategy {
                 LOG.warn("LLM returned HTTP {}: {}", response.statusCode(), response.body());
                 return Category.GENERAL;
             }
-            String answer = JSON.readTree(response.body()).path("response").asText();
+            String answer = JSON.readTree(response.body()).path("message").path("content").asText();
             Category category = parseCategory(answer);
             LOG.info("LLM ({}) classified request {} as {}", model, request.getRequestId(), category);
             return category;
@@ -74,17 +83,20 @@ public class LlmClassificationStrategy implements ClassificationStrategy {
         }
     }
 
-    static Category parseCategory(String answer) {
-        String text = answer == null ? "" : answer.toUpperCase();
-        Category earliest = Category.GENERAL;
-        int earliestIndex = Integer.MAX_VALUE;
-        for (Category category : Category.values()) {
-            int index = text.indexOf(category.name());
-            if (index >= 0 && index < earliestIndex) {
-                earliest = category;
-                earliestIndex = index;
+    public static Category parseCategory(String answer) {
+        String text = answer == null ? "" : answer;
+        try {
+            JsonNode node = JSON.readTree(text);
+            if (node != null && node.has("category")) {
+                text = node.get("category").asText();
             }
+        } catch (IOException notJson) {
+            // Plain-text answers are handled below.
         }
-        return earliest;
+        String upper = text.toUpperCase();
+        return Arrays.stream(Category.values())
+                .filter(category -> upper.contains(category.name()))
+                .min((a, b) -> Integer.compare(upper.indexOf(a.name()), upper.indexOf(b.name())))
+                .orElse(Category.GENERAL);
     }
 }
