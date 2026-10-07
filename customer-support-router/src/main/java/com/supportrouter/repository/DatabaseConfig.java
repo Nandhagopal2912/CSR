@@ -4,7 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-import io.github.cdimascio.dotenv.Dotenv;
+import com.supportrouter.Settings;
 
 public record DatabaseConfig(String url, String username, String password) {
     public DatabaseConfig {
@@ -18,13 +18,12 @@ public record DatabaseConfig(String url, String username, String password) {
     }
 
     public static DatabaseConfig fromEnvironment() {
-        Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
-        String url = setting(dotenv, "DB_URL", "jdbc:mysql://localhost:3306/customer_support");
-        String user = setting(dotenv, "DB_USER", null);
+        String url = Settings.get("DB_URL", "jdbc:mysql://localhost:3306/customer_support");
+        String user = Settings.get("DB_USER", null);
         if (user == null || user.isBlank()) {
             throw new IllegalStateException("DB_USER must be set in .env or the environment");
         }
-        return new DatabaseConfig(url, user, setting(dotenv, "DB_PASSWORD", ""));
+        return new DatabaseConfig(url, user, Settings.get("DB_PASSWORD", ""));
     }
 
     public Connection connect() throws SQLException {
@@ -43,10 +42,5 @@ public record DatabaseConfig(String url, String username, String password) {
     @Override
     public String toString() {
         return "DatabaseConfig[url=" + url + ", username=" + username + "]";
-    }
-
-    private static String setting(Dotenv dotenv, String name, String defaultValue) {
-        String environmentValue = System.getenv(name);
-        return environmentValue != null ? environmentValue : dotenv.get(name, defaultValue);
     }
 }

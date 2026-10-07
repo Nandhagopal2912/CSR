@@ -10,4 +10,9 @@ public class GeneralTicket extends Ticket {
     public GeneralTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
         super(request, initialState, assignedAgent);
     }
+
+    @Override
+    protected String defaultTeam() {
+        return "General Support Team";
+    }
 }

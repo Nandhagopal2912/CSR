@@ -10,4 +10,9 @@ public class AccountTicket extends Ticket {
     public AccountTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
         super(request, initialState, assignedAgent);
     }
+
+    @Override
+    protected String defaultTeam() {
+        return "Account Management Team";
+    }
 }

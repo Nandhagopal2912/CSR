@@ -1,9 +1,11 @@
 package com.supportrouter.service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.supportrouter.handler.AccountHandler;
 import com.supportrouter.handler.BillingHandler;
+import com.supportrouter.handler.CriticalPriorityHandler;
 import com.supportrouter.handler.GeneralHandler;
 import com.supportrouter.handler.SupportHandler;
 import com.supportrouter.handler.TechnicalHandler;
@@ -37,33 +39,36 @@ public class SupportRouter implements SupportService {
 
     public SupportRouter() {
         this(new KeywordClassificationStrategy(), new RuleBasedPriorityStrategy(), new InMemoryTicketRepository(),
-                InMemoryUserRepository.withDemoUsers());
+                InMemoryUserRepository.withDemoUsers(), defaultObservers());
     }
 
     public SupportRouter(ClassificationStrategy classificationStrategy, PriorityStrategy priorityStrategy,
-            TicketRepository ticketRepository, UserRepository userRepository) {
+            TicketRepository ticketRepository, UserRepository userRepository, List<TicketObserver> observers) {
         if (classificationStrategy == null || priorityStrategy == null) {
             throw new IllegalArgumentException("classification and priority strategies are required");
         }
-        if (ticketRepository == null || userRepository == null) {
-            throw new IllegalArgumentException("ticketRepository and userRepository are required");
+        if (ticketRepository == null || userRepository == null || observers == null) {
+            throw new IllegalArgumentException("ticketRepository, userRepository, and observers are required");
         }
         this.classificationStrategy = classificationStrategy;
         this.priorityStrategy = priorityStrategy;
         this.ticketRepository = ticketRepository;
         this.userRepository = userRepository;
-        this.observers = List.of(new AuditObserver(), new NotificationObserver(), new DashboardObserver(),
-                new PersistenceObserver(ticketRepository));
 
-        SupportHandler billing = new BillingHandler();
-        SupportHandler technical = new TechnicalHandler();
-        SupportHandler account = new AccountHandler();
-        SupportHandler general = new GeneralHandler();
+        List<TicketObserver> allObservers = new ArrayList<>(observers);
+        allObservers.add(new PersistenceObserver(ticketRepository));
+        this.observers = List.copyOf(allObservers);
 
-        billing.setNext(technical);
-        technical.setNext(account);
-        account.setNext(general);
-        handlerChain = billing;
+        SupportHandler critical = new CriticalPriorityHandler();
+        critical.setNext(new BillingHandler())
+                .setNext(new TechnicalHandler())
+                .setNext(new AccountHandler())
+                .setNext(new GeneralHandler());
+        handlerChain = critical;
+    }
+
+    public static List<TicketObserver> defaultObservers() {
+        return List.of(new AuditObserver(), new NotificationObserver(), new DashboardObserver());
     }
 
     @Override
@@ -74,22 +79,7 @@ public class SupportRouter implements SupportService {
 
         var category = classificationStrategy.classify(request);
         var priority = priorityStrategy.determinePriority(request);
-
-        System.out.println();
-        System.out.println("========================================");
-        System.out.println("         SUPPORT REQUEST SUMMARY        ");
-        System.out.println("========================================");
-        System.out.printf("Request ID : %s%n", request.getRequestId());
-        System.out.printf("Message    : %s%n", request.getMessage());
-        System.out.printf("Category   : %s%n", category);
-        System.out.printf("Priority   : %s%n", priority);
-        System.out.println("========================================");
-
-        SupportRequest classifiedRequest = request.withClassification(category, priority);
-        Ticket ticket = handlerChain.handle(classifiedRequest);
-        if (ticket == null) {
-            throw new IllegalStateException("No handler could process category " + classifiedRequest.getCategory());
-        }
+        Ticket ticket = handlerChain.handle(request.withClassification(category, priority));
 
         ticketRepository.create(ticket);
         attachObservers(ticket);

@@ -176,6 +176,9 @@ public class MySqlTicketRepository implements TicketRepository {
         Ticket ticket = TicketFactory.createTicket(request, TicketState.fromName(resultSet.getString("status")),
                 resultSet.getString("assigned_agent"));
         ticket.setTicketId(resultSet.getString("ticket_id"));
+        if (Ticket.ESCALATION_TEAM.equals(resultSet.getString("assigned_team"))) {
+            ticket.escalate();
+        }
         return ticket;
     }
 

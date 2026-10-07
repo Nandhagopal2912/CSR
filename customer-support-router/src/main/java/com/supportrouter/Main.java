@@ -147,7 +147,9 @@ public class Main {
 
         Ticket ticket = service.createTicket(request);
         System.out.printf("Ticket created successfully. Ticket ID: %s%n", ticket.getTicketId());
-        System.out.printf("Status: %s%n", ticket.getStatusName());
+        System.out.printf("Category: %s | Priority: %s | Team: %s | Status: %s%n",
+                ticket.getSupportRequest().getCategory(), ticket.getPriority(), ticket.getAssignedTeam(),
+                ticket.getStatusName());
     }
 
     private static void listTickets(SecuredSupportRouter service) {

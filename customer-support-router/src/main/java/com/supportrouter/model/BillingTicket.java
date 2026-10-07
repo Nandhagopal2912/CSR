@@ -10,4 +10,9 @@ public class BillingTicket extends Ticket {
     public BillingTicket(SupportRequest request, TicketState initialState, String assignedAgent) {
         super(request, initialState, assignedAgent);
     }
+
+    @Override
+    protected String defaultTeam() {
+        return "Billing Support Team";
+    }
 }

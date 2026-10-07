@@ -26,7 +26,8 @@ class WebAppTest {
 
     @BeforeEach
     void start() {
-        server = WebApp.create(Application.fromArgs(new String[] { Application.IN_MEMORY_FLAG })).start(0);
+        server = WebApp.create(Application.fromArgs(
+                new String[] { Application.IN_MEMORY_FLAG, Application.NO_LLM_FLAG })).start(0);
         baseUrl = "http://localhost:" + server.port();
     }
 

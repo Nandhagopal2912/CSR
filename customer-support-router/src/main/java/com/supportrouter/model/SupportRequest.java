@@ -56,20 +56,4 @@ public class SupportRequest {
         return priority;
     }
 
-    public String getAssignedTeam() {
-        if (category == null) {
-            throw new IllegalStateException("Category has not been assigned");
-        }
-        switch (category) {
-            case BILLING:
-                return "Billing Support Team";
-            case TECHNICAL:
-                return "Technical Support Team";
-            case ACCOUNT:
-                return "Account Management Team";
-            default:
-                return "General Support Team";
-        }
-    }
-
 }

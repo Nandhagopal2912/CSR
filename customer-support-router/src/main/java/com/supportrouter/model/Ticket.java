@@ -8,10 +8,12 @@ import com.supportrouter.state.OpenState;
 import com.supportrouter.state.TicketState;
 
 public abstract class Ticket {
+    public static final String ESCALATION_TEAM = "Escalation Team";
+
     private String ticketId;
     private final SupportRequest supportRequest;
     private final Priority priority;
-    private final String assignedTeam;
+    private boolean escalated;
     private TicketState status;
     private String assignedAgent;
     private final List<TicketObserver> observers = new ArrayList<>();
@@ -30,7 +32,6 @@ public abstract class Ticket {
         this.ticketId = request.getRequestId();
         this.supportRequest = request;
         this.priority = request.getPriority();
-        this.assignedTeam = request.getAssignedTeam();
         this.status = initialState;
         this.assignedAgent = assignedAgent;
     }
@@ -89,8 +90,18 @@ public abstract class Ticket {
         return priority;
     }
 
+    protected abstract String defaultTeam();
+
     public String getAssignedTeam() {
-        return assignedTeam;
+        return escalated ? ESCALATION_TEAM : defaultTeam();
+    }
+
+    public void escalate() {
+        this.escalated = true;
+    }
+
+    public boolean isEscalated() {
+        return escalated;
     }
 
     public String getAssignedAgent() {

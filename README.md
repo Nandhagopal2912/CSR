@@ -4,14 +4,132 @@ A Java 17 project that routes customer support requests to specialized ticket
 types, with role-based access control and two interfaces: a web app and an
 interactive terminal. It showcases several design patterns working together:
 
-- **Factory:** `TicketFactory` creates the correct ticket subclass for a category.
-- **Strategy:** `ClassificationStrategy` and `PriorityStrategy` classify requests and set priority.
-- **Chain of Responsibility:** the `handler` classes pass a request along until one handles its category.
-- **State:** the `state` classes control the ticket lifecycle and reject invalid transitions.
-- **Observer:** audit, notification, dashboard, and persistence observers react to every status change.
-- **Repository:** `TicketRepository` and `UserRepository` hide whether data lives in MySQL or in memory.
-- **Proxy:** `SecuredSupportRouter` wraps `SupportRouter` and checks the user's role before every call.
-- **MVC (web):** `TicketController` handles HTTP requests, the service layer is the model, and the HTML/JS pages are the view.
+| Pattern | Where | What it does |
+|---|---|---|
+| **Strategy** | `ClassificationStrategy`, `PriorityStrategy` | Swappable rules for category and priority. Keyword matching falls back to a local LLM strategy when it can't decide. |
+| **Chain of Responsibility** | `handler/` | `CriticalPriorityHandler` escalates critical tickets first; otherwise the request passes along to the handler for its category. |
+| **Template Method** | `SupportHandler.handle()` | Fixed "can I handle it? process it : pass it on" algorithm; subclasses only fill in `canHandle()` and optionally `process()`. |
+| **Factory** | `TicketFactory` | Creates the right ticket subclass; each subclass supplies its own support team. |
+| **State** | `state/` | Controls the ticket lifecycle and rejects invalid transitions. |
+| **Observer** | `observer/` | Audit, notification, dashboard, and persistence observers react to every status change. Observers are injected into `SupportRouter`. |
+| **Repository** | `repository/` | Hides whether tickets and users live in MySQL or in memory. |
+| **Proxy** | `SecuredSupportRouter` | Same interface as `SupportRouter`, but checks the user's role before every call. |
+| **MVC** (web) | `web/`, `resources/public/` | `TicketController` handles HTTP, the service layer is the model, the HTML/JS pages are the view. |
+
+## Class Diagram
+
+```mermaid
+classDiagram
+    direction LR
+
+    class SupportService {
+        <<interface>>
+        +createTicket(SupportRequest) Ticket
+        +listTickets() List~Ticket~
+        +assignTicket(id, agent) Ticket
+        +changeStatus(id, TicketAction) Ticket
+    }
+    class SupportRouter
+    class SecuredSupportRouter {
+        -User user
+    }
+    SupportService <|.. SupportRouter
+    SupportService <|.. SecuredSupportRouter
+    SecuredSupportRouter o--> SupportService : delegate (Proxy)
+
+    class ClassificationStrategy {
+        <<interface>>
+        +classify(SupportRequest) Category
+    }
+    class KeywordClassificationStrategy
+    class LlmClassificationStrategy
+    class PriorityStrategy {
+        <<interface>>
+        +determinePriority(SupportRequest) Priority
+    }
+    ClassificationStrategy <|.. KeywordClassificationStrategy
+    ClassificationStrategy <|.. LlmClassificationStrategy
+    KeywordClassificationStrategy o--> ClassificationStrategy : fallback
+    PriorityStrategy <|.. RuleBasedPriorityStrategy
+    SupportRouter --> ClassificationStrategy
+    SupportRouter --> PriorityStrategy
+
+    class SupportHandler {
+        <<abstract>>
+        +handle(SupportRequest) Ticket
+        #canHandle(SupportRequest) bool
+        #process(SupportRequest) Ticket
+    }
+    SupportHandler <|-- CriticalPriorityHandler
+    SupportHandler <|-- BillingHandler
+    SupportHandler <|-- TechnicalHandler
+    SupportHandler <|-- AccountHandler
+    SupportHandler <|-- GeneralHandler
+    SupportHandler o--> SupportHandler : next
+    SupportRouter --> SupportHandler : chain
+    SupportHandler ..> TicketFactory : process()
+
+    class Ticket {
+        <<abstract>>
+        -TicketState status
+        +assign(agent)
+        +start()
+        +resolve()
+        +close()
+        #defaultTeam() String
+    }
+    TicketFactory ..> Ticket : creates
+    Ticket <|-- BillingTicket
+    Ticket <|-- TechnicalTicket
+    Ticket <|-- AccountTicket
+    Ticket <|-- GeneralTicket
+
+    class TicketState {
+        <<interface>>
+        +assign() TicketState
+        +start() TicketState
+        +resolve() TicketState
+        +close() TicketState
+    }
+    Ticket --> TicketState
+    TicketState <|.. OpenState
+    TicketState <|.. AssignedState
+    TicketState <|.. InProgressState
+    TicketState <|.. ResolvedState
+    TicketState <|.. ClosedState
+
+    class TicketObserver {
+        <<interface>>
+        +update(Ticket, old, new)
+    }
+    Ticket o--> TicketObserver : notifies
+    TicketObserver <|.. AuditObserver
+    TicketObserver <|.. NotificationObserver
+    TicketObserver <|.. DashboardObserver
+    TicketObserver <|.. PersistenceObserver
+
+    class TicketRepository {
+        <<interface>>
+    }
+    TicketRepository <|.. MySqlTicketRepository
+    TicketRepository <|.. InMemoryTicketRepository
+    SupportRouter --> TicketRepository
+    PersistenceObserver --> TicketRepository
+```
+
+## How a Request Is Classified
+
+1. **Keywords:** `KeywordClassificationStrategy` counts whole-word keyword matches
+   for each category. A single clear winner is used directly.
+2. **LLM fallback:** if no keyword matches, or two categories tie (for example
+   "payment page shows an error"), the request goes to
+   `LlmClassificationStrategy`. It asks a small open-source model running
+   locally in [Ollama](https://ollama.com) to choose a category.
+3. **Safe default:** if Ollama isn't running or returns an error, the request is
+   classified as GENERAL, so routing never fails.
+
+Priority comes from `RuleBasedPriorityStrategy`. CRITICAL requests are
+escalated to the Escalation Team by the first handler in the chain.
 
 ## Roles
 
@@ -76,6 +194,28 @@ DB_PASSWORD=your_mysql_password
 ```
 
 `.env` is ignored by Git. Never commit passwords or other credentials.
+
+### Set up the LLM fallback (optional)
+
+1. Install Ollama from https://ollama.com/download.
+2. Download the small model, about 400 MB:
+
+   ```bash
+   ollama pull qwen2.5:0.5b
+   ```
+
+Ollama runs in the background on `http://localhost:11434`. To use a different
+model or URL, or to turn the LLM off, set these in `.env`:
+
+```env
+LLM_ENABLED=true
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:0.5b
+```
+
+You can also add `--no-llm` to the run command to turn it off for one run.
+Without Ollama the app still works, and unclear requests are classified as
+GENERAL.
 
 Both interfaces check the database connection at startup and exit with a clear
 message if MySQL isn't reachable.
@@ -155,9 +295,11 @@ All endpoints except login require a session. Errors are returned as
 mvn test
 ```
 
-The tests cover category routing, the full ticket lifecycle, every invalid
-state transition, observer notifications, status history, the permission
-rules for every role, a scripted terminal session, and the web API over HTTP.
+The tests cover category routing, keyword matching and the LLM fallback
+(against a fake Ollama server, so no model is needed), critical-ticket
+escalation, the full ticket lifecycle, every invalid state transition,
+observer notifications, status history, the permission rules for every role,
+a scripted terminal session, and the web API over HTTP.
 
 ## Project Structure
 
@@ -167,13 +309,14 @@ src/
 │   ├── Application.java   Wires repositories and services (MySQL or in-memory)
 │   ├── Main.java          Terminal interface
 │   ├── factory/           Ticket creation
-│   ├── handler/           Chain of Responsibility handlers
+│   ├── Settings.java      Reads settings from the environment or .env
+│   ├── handler/           Chain of Responsibility handlers (Template Method base)
 │   ├── model/             Requests, tickets, users, roles, and permissions
 │   ├── observer/          Audit, notification, dashboard, and persistence observers
 │   ├── repository/        MySQL and in-memory repositories
 │   ├── service/           SupportRouter and the SecuredSupportRouter proxy
 │   ├── state/             Ticket lifecycle states
-│   ├── strategy/          Classification and priority strategies
+│   ├── strategy/          Keyword, LLM, and priority strategies
 │   └── web/               Javalin web server and controller
 ├── main/resources/
 │   ├── public/            Web frontend (HTML, CSS, JavaScript)
