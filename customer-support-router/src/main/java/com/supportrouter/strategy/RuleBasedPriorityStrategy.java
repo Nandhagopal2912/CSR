@@ -1,9 +1,18 @@
 package com.supportrouter.strategy;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import com.supportrouter.model.Priority;
 import com.supportrouter.model.SupportRequest;
 
 public class RuleBasedPriorityStrategy implements PriorityStrategy {
+    private static final Set<String> CRITICAL = Set.of("critical", "security", "outage", "breach", "hacked");
+    private static final Set<String> HIGH = Set.of("urgent", "failed", "fail", "fails", "failing", "error",
+            "errors", "blocked", "asap");
+    private static final Set<String> LOW = Set.of("question", "questions", "information", "info");
 
     @Override
     public Priority determinePriority(SupportRequest request) {
@@ -11,15 +20,15 @@ public class RuleBasedPriorityStrategy implements PriorityStrategy {
             throw new IllegalArgumentException("request and request message are required");
         }
 
-        String message = request.getMessage().toLowerCase();
-        if (message.contains("critical") || message.contains("security") || message.contains("outage")) {
+        Set<String> words = Arrays.stream(request.getMessage().toLowerCase().split("[^a-z]+"))
+                .collect(Collectors.toSet());
+        if (!Collections.disjoint(words, CRITICAL)) {
             return Priority.CRITICAL;
         }
-        if (message.contains("urgent") || message.contains("failed") || message.contains("error")
-                || message.contains("blocked")) {
+        if (!Collections.disjoint(words, HIGH)) {
             return Priority.HIGH;
         }
-        if (message.contains("question") || message.contains("information")) {
+        if (!Collections.disjoint(words, LOW)) {
             return Priority.LOW;
         }
         return Priority.MEDIUM;

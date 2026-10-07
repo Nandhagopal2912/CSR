@@ -169,6 +169,42 @@ class SupportRouterTest {
     }
 
     @Test
+    void invalidEmailIsRejectedAndNothingIsStored() {
+        SupportRouter router = new SupportRouter();
+        SupportRequest bad = Main.createSupportRequest("", "Ada", "ada-at-example", "payment failed");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> router.createTicket(bad));
+        assertEquals("'ada-at-example' is not a valid email address.", error.getMessage());
+        assertTrue(router.listTickets().isEmpty());
+        assertTrue(Customer.isValidEmail("ada.lovelace@example.co.uk"));
+        assertTrue(!Customer.isValidEmail("ada@example") && !Customer.isValidEmail("a b@example.com"));
+    }
+
+    @Test
+    void priorityRulesMatchWholeWordsOnly() {
+        RuleBasedPriorityStrategy strategy = new RuleBasedPriorityStrategy();
+        assertEquals(Priority.MEDIUM, strategy.determinePriority(request("A film about terrorism and urgency")));
+        assertEquals(Priority.HIGH, strategy.determinePriority(request("My payment failed again")));
+        assertEquals(Priority.CRITICAL, strategy.determinePriority(request("Our account was hacked")));
+        assertEquals(Priority.LOW, strategy.determinePriority(request("Quick question about plans")));
+    }
+
+    @Test
+    void blankCustomerIdIsDerivedFromEmail() {
+        String first = Main.createSupportRequest("", "Ada", "Ada@Example.com", "hi").getCustomer().getCustomerId();
+        String again = Main.createSupportRequest(null, "Ada L", " ada@example.com ", "hi").getCustomer()
+                .getCustomerId();
+        String other = Main.createSupportRequest("", "Bob", "bob@example.com", "hi").getCustomer().getCustomerId();
+
+        assertEquals(first, again);
+        assertTrue(first.startsWith("C-") && first.length() <= 50);
+        assertTrue(!first.equals(other));
+        assertEquals("C-123", Main.createSupportRequest(" C-123 ", "Ada", "ada@example.com", "hi")
+                .getCustomer().getCustomerId());
+    }
+
+    @Test
     void consoleEnforcesRolesAcrossLogins() {
         SupportRouter router = new SupportRouter();
         InMemoryUserRepository users = InMemoryUserRepository.withDemoUsers();

@@ -85,10 +85,8 @@ class TicketController {
             if (isBlank(body.customerName()) || isBlank(body.customerEmail())) {
                 throw new IllegalArgumentException("Customer name and email are required.");
             }
-            String customerId = isBlank(body.customerId()) ? "C-" + UUID.randomUUID() : body.customerId().trim();
             request = new SupportRequest("R-" + UUID.randomUUID(),
-                    new Customer(customerId, body.customerName().trim(),
-                            body.customerEmail().trim()),
+                    Customer.withOptionalId(body.customerId(), body.customerName(), body.customerEmail()),
                     body.message().trim());
         } else {
             request = new SupportRequest("R-" + UUID.randomUUID(), user.asCustomer(), body.message().trim());

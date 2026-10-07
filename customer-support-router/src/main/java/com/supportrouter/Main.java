@@ -231,10 +231,8 @@ public class Main {
     }
 
     static SupportRequest createSupportRequest(String customerId, String name, String email, String message) {
-        String normalizedCustomerId = customerId == null || customerId.isBlank() ? "C-" + UUID.randomUUID()
-                : customerId;
-        Customer customer = new Customer(normalizedCustomerId, name, email);
-        return new SupportRequest("R-" + UUID.randomUUID(), customer, message);
+        return new SupportRequest("R-" + UUID.randomUUID(), Customer.withOptionalId(customerId, name, email),
+                message);
     }
 
     private static String prompt(Scanner scanner, String label) {

@@ -9,6 +9,7 @@ import com.supportrouter.handler.CriticalPriorityHandler;
 import com.supportrouter.handler.GeneralHandler;
 import com.supportrouter.handler.SupportHandler;
 import com.supportrouter.handler.TechnicalHandler;
+import com.supportrouter.model.Customer;
 import com.supportrouter.model.Role;
 import com.supportrouter.model.StatusChange;
 import com.supportrouter.model.SupportRequest;
@@ -75,6 +76,10 @@ public class SupportRouter implements SupportService {
     public Ticket createTicket(SupportRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
+        }
+        String email = request.getCustomer().getEmail();
+        if (!Customer.isValidEmail(email)) {
+            throw new IllegalArgumentException("'" + email + "' is not a valid email address.");
         }
 
         var category = classificationStrategy.classify(request);
